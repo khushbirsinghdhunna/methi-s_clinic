@@ -1,0 +1,6 @@
+{
+  "name": "Skin Brite Clinic",
+  "description": "Dr. Naveen Keswani (Skin Brite Clinic) Skin, Laser & Hair Clinic. Premium dermatological, laser, and hair therapies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

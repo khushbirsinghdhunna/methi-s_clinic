@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: dr-methi-clinic
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.x
+      - key: GEMINI_API_KEY
+        sync: false
