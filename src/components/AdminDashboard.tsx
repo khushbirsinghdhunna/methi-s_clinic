@@ -175,6 +175,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const [waConnected, setWaConnected] = useState<boolean>(true);
+
+  useEffect(() => {
+    const checkWa = async () => {
+      try {
+        const res = await fetch('/api/whatsapp/status');
+        const data = await res.json();
+        setWaConnected(data.status === 'connected');
+      } catch {
+        setWaConnected(false);
+      }
+    };
+    checkWa();
+    const interval = setInterval(checkWa, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F8F6F2] font-sans text-[#0B1426]">
       {/* Top Bar */}
@@ -191,16 +208,29 @@ export default function AdminDashboard() {
             </span>
             <span className="text-[9px] font-bold uppercase tracking-wider">Live</span>
           </div>
+
+          <a 
+            href="#/whatsapp" 
+            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              waConnected ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-[#ffdad6] text-[#93000a] hover:bg-[#ffdad6]/80'
+            }`}
+            title="Click to view WhatsApp connection details"
+          >
+            <span className="material-symbols-outlined text-[12px]">chat</span>
+            <span>{waConnected ? 'WhatsApp Online' : 'WhatsApp Offline'}</span>
+          </a>
         </div>
-        <div className="w-6"></div>
+        <button
+          onClick={handleLogout}
+          className="text-[#4A5568] hover:text-[#93000a] flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg hover:bg-[#F0EDE8] transition-colors"
+          title="Sign out"
+        >
+          <span className="material-symbols-outlined text-[16px]">logout</span>
+          <span className="hidden sm:inline">Logout</span>
+        </button>
       </header>
 
       <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 space-y-12">
-        {/* Auth Warning */}
-        <div className="bg-[#ffdad6] text-[#93000a] text-sm p-3 rounded-lg flex items-center gap-2">
-          <span className="material-symbols-outlined text-[18px]">warning</span>
-          This admin page is not protected by authentication. Add authentication before production use.
-        </div>
 
         {/* Section 1: Appointments */}
         <section className="space-y-6">
