@@ -159,7 +159,7 @@ let reviews = [
 // Authentication & Security
 // =============================================================================
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_key_change_me_in_production";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const ADMIN_PASSWORD = (process.env.ADMIN_PASSWORD || "admin123").trim();
 
 // Middleware to protect routes
 const authMiddleware = (req, res, next) => {
@@ -178,7 +178,7 @@ const authMiddleware = (req, res, next) => {
 
 app.post("/api/admin/login", (req, res) => {
   const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
+  if (password && password.trim() === ADMIN_PASSWORD) {
     const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "24h" });
     return res.json({ token });
   }
