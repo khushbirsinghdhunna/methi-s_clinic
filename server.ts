@@ -321,6 +321,168 @@ function generateSlots(startTime: string, endTime: string): string[] {
   return slots;
 }
 
+// =============================================================================
+// Meta WhatsApp Cloud API Integration (Official & Automated)
+// =============================================================================
+const META_WA_TOKEN = process.env.META_WA_TOKEN || "";
+const META_WA_PHONE_ID = process.env.META_WA_PHONE_ID || "1228036067070863";
+const META_WA_VERIFY_TOKEN = process.env.META_WA_VERIFY_TOKEN || "methi_clinic_webhook_2026";
+
+async function sendMetaWhatsAppMessage(to: string, payload: any) {
+  if (!META_WA_TOKEN || !META_WA_PHONE_ID) {
+    console.warn("Missing META_WA_TOKEN or META_WA_PHONE_ID in environment.");
+    return;
+  }
+  try {
+    const res = await fetch(`https://graph.facebook.com/v22.0/${META_WA_PHONE_ID}/messages`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${META_WA_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        ...payload
+      })
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("Failed to send Meta WhatsApp message:", err);
+  }
+}
+
+// Meta Webhook Verification Challenge (GET)
+app.get("/api/whatsapp/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode === "subscribe" && token === META_WA_VERIFY_TOKEN) {
+    console.log("✅ Meta Webhook verified successfully by Facebook!");
+    return res.status(200).send(challenge);
+  }
+  return res.sendStatus(403);
+});
+
+// Meta Webhook Event Listener (POST)
+app.post("/api/whatsapp/webhook", async (req, res) => {
+  res.status(200).send("EVENT_RECEIVED");
+
+  try {
+    const body = req.body;
+    if (body.object !== "whatsapp_business_account") return;
+
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value;
+        if (!value || !value.messages || value.messages.length === 0) continue;
+
+        const message = value.messages[0];
+        const from = message.from; // Patient phone number
+        const contactName = value.contacts?.[0]?.profile?.name || "Patient";
+
+        // 1. User clicked an interactive button or list item
+        if (message.type === "interactive") {
+          const interactive = message.interactive;
+          let selectedId = "";
+          let selectedTitle = "";
+
+          if (interactive.type === "button_reply") {
+            selectedId = interactive.button_reply.id;
+            selectedTitle = interactive.button_reply.title;
+          } else if (interactive.type === "list_reply") {
+            selectedId = interactive.list_reply.id;
+            selectedTitle = interactive.list_reply.title;
+          }
+
+          console.log(`[Meta WA] ${contactName} (${from}) clicked option: ${selectedId} (${selectedTitle})`);
+
+          if (selectedId.startsWith("slot_")) {
+            const todayStr = new Date().toLocaleDateString("en-CA");
+            const timeDisplay = selectedTitle.replace(/^Today\s*/i, "").trim();
+
+            const apptId = `A${Date.now().toString().slice(-6)}`;
+            await WAAppointmentModel.create({
+              id: apptId,
+              doctor: "Dr. Vanita Methi",
+              patientName: contactName,
+              patientPhone: from,
+              date: todayStr,
+              time: timeDisplay,
+              status: "confirmed",
+              source: "whatsapp",
+              notes: "Booked automatically via WhatsApp Interactive Buttons",
+              whatsappChatId: from
+            });
+
+            console.log(`✅ [Meta WA] Automatically created appointment ${apptId} for ${contactName} at ${timeDisplay}`);
+
+            // Send confirmation back to patient on WhatsApp
+            await sendMetaWhatsAppMessage(from, {
+              type: "text",
+              text: {
+                body: `🎉 *Your Appointment is CONFIRMED!*\n\n👨‍⚕️ *Doctor:* Dr. Vanita Methi\n📅 *Date:* Today (${todayStr})\n🕐 *Time:* ${timeDisplay}\n📋 *Ref ID:* #${apptId}\n👤 *Patient:* ${contactName}\n\n📍 *Clinic:* DR METHI ENT CARE AND SKIN TALKS\n\nPlease arrive 10 minutes prior to your time. Our team looks forward to seeing you!`
+              }
+            });
+            return;
+          }
+        }
+
+        // 2. User sent a regular text message (e.g. "Hi", "Hello", "Book appointment")
+        if (message.type === "text") {
+          const text = message.text.body.trim();
+          console.log(`[Meta WA] Received text from ${contactName} (${from}): ${text}`);
+
+          // Look up today's availability
+          const todayStr = new Date().toLocaleDateString("en-CA");
+          const booked = await WAAppointmentModel.find({ date: todayStr, status: { $ne: "cancelled" } });
+          const bookedTimes = booked.map(b => b.time);
+
+          const defaultSlots = [
+            "05:00 PM", "05:10 PM", "05:20 PM", "05:30 PM", 
+            "05:40 PM", "05:50 PM", "06:00 PM", "06:10 PM"
+          ];
+          const available = defaultSlots.filter(s => !bookedTimes.includes(s)).slice(0, 3);
+
+          if (available.length > 0) {
+            await sendMetaWhatsAppMessage(from, {
+              type: "interactive",
+              interactive: {
+                type: "button",
+                header: { type: "text", text: "DR METHI CLINIC" },
+                body: {
+                  text: `Hello ${contactName}! 👋\nWelcome to Dr. Vanita Methi Clinic.\n\nHere are the live open 10-minute slots for Today. Please tap a time to book instantly:`
+                },
+                footer: { text: "Tap a button below to confirm" },
+                action: {
+                  buttons: available.map(time => ({
+                    type: "reply",
+                    reply: {
+                      id: `slot_${time.replace(/[:\s]/g, "").toLowerCase()}`,
+                      title: `Today ${time}`
+                    }
+                  }))
+                }
+              }
+            });
+          } else {
+            await sendMetaWhatsAppMessage(from, {
+              type: "text",
+              text: {
+                body: `Hello ${contactName}, all slots for today are currently booked. Please visit our website to view upcoming dates:\nhttps://methi-clinic.com/#/appointment`
+              }
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error processing Meta webhook:", err);
+  }
+});
+
 // --- Appointment Endpoints ---
 
 app.get("/api/wa-appointments", authMiddleware, async (req, res) => {
