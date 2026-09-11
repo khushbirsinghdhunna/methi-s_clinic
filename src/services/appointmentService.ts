@@ -70,6 +70,10 @@ export async function getAllAppointments(): Promise<WhatsAppAppointment[]> {
   const res = await fetch(`${API_BASE}/wa-appointments`, {
     headers: getAuthHeaders()
   });
+  if (res.status === 401) {
+    logoutAdmin();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error('Failed to fetch appointments');
   return res.json();
 }
@@ -91,6 +95,10 @@ export async function updateAppointment(
     headers: getAuthHeaders(),
     body: JSON.stringify(updates),
   });
+  if (res.status === 401) {
+    logoutAdmin();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error('Failed to update appointment');
   return res.json();
 }
@@ -113,6 +121,10 @@ export async function updateAvailabilityConfig(config: Availability[]): Promise<
     headers: getAuthHeaders(),
     body: JSON.stringify({ availability: config }),
   });
+  if (res.status === 401) {
+    logoutAdmin();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error('Failed to update availability');
   return res.json();
 }
@@ -142,6 +154,10 @@ export async function blockDate(date: string, reason?: string): Promise<BlockedD
     headers: getAuthHeaders(),
     body: JSON.stringify({ date, reason }),
   });
+  if (res.status === 401) {
+    logoutAdmin();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error('Failed to block date');
   return res.json();
 }
@@ -152,5 +168,9 @@ export async function unblockDate(date: string): Promise<void> {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
+  if (res.status === 401) {
+    logoutAdmin();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error('Failed to unblock date');
 }

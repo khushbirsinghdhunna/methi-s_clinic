@@ -235,6 +235,20 @@ export default function AdminDashboard() {
       </header>
 
       <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 space-y-12">
+        {error && (
+          <div className="bg-[#ffdad6] border border-[#93000a]/20 text-[#93000a] p-4 rounded-2xl flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg">error</span>
+              <span>{error}</span>
+            </div>
+            <button 
+              onClick={() => handleLogout()} 
+              className="text-xs font-bold underline underline-offset-2 hover:opacity-80"
+            >
+              Re-login
+            </button>
+          </div>
+        )}
 
         {/* Section 1: Appointments */}
         <section className="space-y-6">
