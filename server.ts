@@ -350,6 +350,14 @@ function setupWhatsAppBot() {
       }
     });
 
+    whatsappClient.on('authenticated', () => {
+      console.log('✅ WhatsApp Authenticated!');
+    });
+
+    whatsappClient.on('loading_screen', (percent: any, message: any) => {
+      console.log(`WhatsApp loading: ${percent}% - ${message}`);
+    });
+
     whatsappClient.on('ready', () => {
       console.log('✅ WhatsApp Bot is ready and listening for messages!');
       waStatus = 'connected';
@@ -455,19 +463,34 @@ app.get("/api/whatsapp/status", (req, res) => {
 
 app.post("/api/whatsapp/reconnect", async (req, res) => {
   if (waStatus === 'initializing') {
-    return res.json({ success: false, message: 'Already initializing' });
+    return res.json({ success: true, status: 'initializing', message: 'Already initializing' });
   }
-  
-  try {
-    if (whatsappClient) {
-      await whatsappClient.destroy();
+
+  console.log("Restarting WhatsApp Bot requested...");
+  waStatus = 'initializing';
+  waQrUrl = null;
+  res.json({ success: true, status: 'initializing' });
+
+  // Handle shutdown and restart in background
+  (async () => {
+    try {
+      if (whatsappClient) {
+        console.log("Destroying existing WhatsApp client...");
+        await Promise.race([
+          whatsappClient.destroy(),
+          new Promise(resolve => setTimeout(resolve, 4000))
+        ]);
+        whatsappClient = null;
+      }
+    } catch (err) {
+      console.error("Error destroying whatsapp client", err);
     }
-  } catch (err) {
-    console.error("Error destroying whatsapp client", err);
-  }
-  
-  setupWhatsAppBot();
-  res.json({ success: true, status: waStatus });
+    
+    // Give file locks 1 second to release before starting new browser
+    setTimeout(() => {
+      setupWhatsAppBot();
+    }, 1500);
+  })();
 });
 
 // --- WhatsApp Appointment Endpoints ---
