@@ -353,6 +353,15 @@ async function sendMetaWhatsAppMessage(to: string, payload: any) {
   }
 }
 
+// Diagnostic endpoint
+app.get("/api/whatsapp/diag", (req, res) => {
+  res.json({
+    hasToken: !!process.env.META_WA_TOKEN,
+    tokenPrefix: process.env.META_WA_TOKEN ? process.env.META_WA_TOKEN.substring(0, 8) + "..." : "NONE",
+    phoneId: process.env.META_WA_PHONE_ID || "NONE"
+  });
+});
+
 // Meta Webhook Verification Challenge (GET)
 app.get("/api/whatsapp/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
