@@ -32,19 +32,20 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dateFilter, setDateFilter] = useState<string>(''); // empty string = all dates
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Edit modal state
   const [editingAppt, setEditingAppt] = useState<WhatsAppAppointment | null>(null);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
-  // Add availability state
+  // Availability form state
   const [addAvailDay, setAddAvailDay] = useState('');
   const [addAvailStart, setAddAvailStart] = useState('');
   const [addAvailEnd, setAddAvailEnd] = useState('');
 
-  // Add blocked date state
+  // Block date form state
   const [addBlockDate, setAddBlockDate] = useState('');
   const [addBlockReason, setAddBlockReason] = useState('');
 
@@ -90,17 +91,20 @@ export default function AdminDashboard() {
     return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
   }
 
-  const filteredAppointments = appointments.filter(a => a.date === dateFilter);
+  const filteredAppointments = appointments.filter(a => {
+    const matchesDate = !dateFilter || a.date === dateFilter;
+    const matchesStatus = statusFilter === 'all' || a.status === statusFilter;
+    return matchesDate && matchesStatus;
+  });
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayAppointments = appointments.filter(a => a.date === todayStr);
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
   const stats = {
-    total: todayAppointments.length,
-    pending: todayAppointments.filter(a => a.status === 'pending').length,
-    confirmed: todayAppointments.filter(a => a.status === 'confirmed').length,
-    completed: todayAppointments.filter(a => a.status === 'completed').length,
-    cancelled: todayAppointments.filter(a => a.status === 'cancelled').length,
+    total: appointments.length,
+    pending: appointments.filter(a => a.status === 'pending').length,
+    confirmed: appointments.filter(a => a.status === 'confirmed').length,
+    completed: appointments.filter(a => a.status === 'completed').length,
+    cancelled: appointments.filter(a => a.status === 'cancelled').length,
   };
 
   const handleUpdateStatus = async (id: string, status: WhatsAppAppointment['status']) => {
@@ -234,51 +238,135 @@ export default function AdminDashboard() {
 
         {/* Section 1: Appointments */}
         <section className="space-y-6">
-          <h2 className="font-display text-[11px] uppercase tracking-[0.2em] text-[#C9A96E] font-bold">
-            Today's Overview
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 className="font-display text-[11px] uppercase tracking-[0.2em] text-[#C9A96E] font-bold">
+              Appointments Overview
+            </h2>
+            <button
+              onClick={() => loadData()}
+              className="text-xs text-[#4A5568] hover:text-[#0B1426] flex items-center gap-1.5 self-start sm:self-auto bg-white border border-[#D6D2CC] px-3 py-1.5 rounded-full shadow-sm hover:border-[#C9A96E] transition-colors"
+            >
+              <span className={`material-symbols-outlined text-[14px] ${loading ? 'animate-spin' : ''}`}>sync</span>
+              <span>Refresh Now</span>
+            </button>
+          </div>
           
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="bg-white rounded-[20px] border border-[#D6D2CC] p-4 flex flex-col justify-between">
+            <div 
+              onClick={() => setStatusFilter('all')}
+              className={`bg-white rounded-[20px] border p-4 flex flex-col justify-between cursor-pointer transition-all ${
+                statusFilter === 'all' ? 'border-[#0B1426] shadow-sm' : 'border-[#D6D2CC] hover:border-[#0B1426]/50'
+              }`}
+            >
               <span className="font-serif text-3xl font-semibold">{stats.total}</span>
-              <span className="font-display text-[10px] uppercase tracking-wider text-[#4A5568]">Total Today</span>
+              <span className="font-display text-[10px] uppercase tracking-wider text-[#4A5568]">Total</span>
             </div>
-            <div className="bg-white rounded-[20px] border border-[#C9A96E]/40 p-4 flex flex-col justify-between">
+            <div 
+              onClick={() => setStatusFilter('pending')}
+              className={`bg-white rounded-[20px] border p-4 flex flex-col justify-between cursor-pointer transition-all ${
+                statusFilter === 'pending' ? 'border-[#C9A96E] shadow-sm bg-[#C9A96E]/5' : 'border-[#C9A96E]/40 hover:border-[#C9A96E]'
+              }`}
+            >
               <span className="font-serif text-3xl font-semibold text-[#C9A96E]">{stats.pending}</span>
               <span className="font-display text-[10px] uppercase tracking-wider text-[#4A5568]">Pending</span>
             </div>
-            <div className="bg-white rounded-[20px] border border-[#D6D2CC] p-4 flex flex-col justify-between">
+            <div 
+              onClick={() => setStatusFilter('confirmed')}
+              className={`bg-white rounded-[20px] border p-4 flex flex-col justify-between cursor-pointer transition-all ${
+                statusFilter === 'confirmed' ? 'border-green-600 shadow-sm bg-green-50/50' : 'border-[#D6D2CC] hover:border-green-600'
+              }`}
+            >
               <span className="font-serif text-3xl font-semibold text-green-700">{stats.confirmed}</span>
               <span className="font-display text-[10px] uppercase tracking-wider text-[#4A5568]">Confirmed</span>
             </div>
-            <div className="bg-white rounded-[20px] border border-[#D6D2CC] p-4 flex flex-col justify-between">
+            <div 
+              onClick={() => setStatusFilter('completed')}
+              className={`bg-white rounded-[20px] border p-4 flex flex-col justify-between cursor-pointer transition-all ${
+                statusFilter === 'completed' ? 'border-[#0B1426] shadow-sm' : 'border-[#D6D2CC] hover:border-[#0B1426]'
+              }`}
+            >
               <span className="font-serif text-3xl font-semibold text-[#0B1426]">{stats.completed}</span>
               <span className="font-display text-[10px] uppercase tracking-wider text-[#4A5568]">Completed</span>
             </div>
-            <div className="bg-white rounded-[20px] border border-[#D6D2CC] p-4 flex flex-col justify-between">
+            <div 
+              onClick={() => setStatusFilter('cancelled')}
+              className={`bg-white rounded-[20px] border p-4 flex flex-col justify-between cursor-pointer transition-all ${
+                statusFilter === 'cancelled' ? 'border-[#93000a] shadow-sm bg-red-50/30' : 'border-[#D6D2CC] hover:border-[#93000a]'
+              }`}
+            >
               <span className="font-serif text-3xl font-semibold text-[#93000a]">{stats.cancelled}</span>
               <span className="font-display text-[10px] uppercase tracking-wider text-[#4A5568]">Cancelled</span>
             </div>
           </div>
 
-          {/* Date Filter + Appointment List */}
-          <div className="flex items-center gap-4 pt-4">
-            <h2 className="font-display text-[11px] uppercase tracking-[0.2em] text-[#C9A96E] font-bold">
-              Appointments
-            </h2>
-            <input 
-              type="date" 
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-3 py-1.5 border border-[#D6D2CC] rounded-lg text-sm bg-white outline-none focus:border-[#C9A96E] text-[#0B1426]"
-            />
+          {/* Filters Bar: Status Tabs + Date Filter */}
+          <div className="bg-white rounded-[20px] border border-[#D6D2CC] p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[#4A5568] mr-1">Status:</span>
+              {(['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium capitalize transition-colors ${
+                    statusFilter === s
+                      ? 'bg-[#0B1426] text-white'
+                      : 'bg-[#F0EDE8] text-[#4A5568] hover:bg-[#D6D2CC]'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[#4A5568] mr-1">Date:</span>
+              <button
+                onClick={() => setDateFilter('')}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  !dateFilter ? 'bg-[#0B1426] text-white' : 'bg-[#F0EDE8] text-[#4A5568] hover:bg-[#D6D2CC]'
+                }`}
+              >
+                All Dates
+              </button>
+              <button
+                onClick={() => setDateFilter(todayStr)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  dateFilter === todayStr ? 'bg-[#0B1426] text-white' : 'bg-[#F0EDE8] text-[#4A5568] hover:bg-[#D6D2CC]'
+                }`}
+              >
+                Today
+              </button>
+              <input 
+                type="date" 
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="px-3 py-1 border border-[#D6D2CC] rounded-lg text-xs bg-[#F8F6F2] outline-none focus:border-[#C9A96E] text-[#0B1426]"
+              />
+              {dateFilter && (
+                <button
+                  onClick={() => setDateFilter('')}
+                  className="text-xs text-[#93000a] hover:underline ml-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Appointment List */}
           <div className="space-y-4">
             {filteredAppointments.length === 0 ? (
               <div className="bg-white rounded-[20px] border border-[#D6D2CC] p-8 text-center">
                 <span className="material-symbols-outlined text-3xl text-[#D6D2CC] mb-2">event_available</span>
-                <p className="text-sm text-[#4A5568]">No appointments for this date.</p>
+                <p className="text-sm text-[#4A5568]">No appointments match your filters.</p>
+                {(dateFilter || statusFilter !== 'all') && (
+                  <button
+                    onClick={() => { setDateFilter(''); setStatusFilter('all'); }}
+                    className="mt-3 text-xs text-[#C9A96E] font-semibold underline underline-offset-4"
+                  >
+                    Reset all filters
+                  </button>
+                )}
               </div>
             ) : (
               filteredAppointments.map(appt => (
@@ -289,18 +377,27 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <span className="font-serif text-lg font-semibold text-[#0B1426]">{appt.time}</span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-serif text-lg font-semibold text-[#0B1426]">
+                        {appt.date} • {appt.time}
+                      </span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(appt.status)}`}>
                         {appt.status}
                       </span>
                     </div>
-                    <div className="text-sm text-[#0B1426] font-medium">
-                      {appt.patientName || <span className="text-[#4A5568] italic">Awaiting via WhatsApp</span>}
+                    <div className="text-sm text-[#0B1426] font-medium flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-[#4A5568]">person</span>
+                      <span>{appt.patientName || <span className="text-[#4A5568] italic font-normal">Awaiting name via WhatsApp</span>}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-[#4A5568]">
-                      <span className="bg-[#F0EDE8] px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">chat</span>
+                    {appt.patientPhone && (
+                      <div className="text-xs text-[#4A5568] flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-green-700">call</span>
+                        <span>{appt.patientPhone}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 text-xs text-[#4A5568] pt-1">
+                      <span className="bg-[#F0EDE8] px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
+                        <span className="material-symbols-outlined text-[12px] text-green-700">chat</span>
                         WhatsApp
                       </span>
                       <span className="font-display text-[10px]">REF: {appt.id}</span>
