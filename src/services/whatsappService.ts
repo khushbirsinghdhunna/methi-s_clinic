@@ -1,12 +1,11 @@
 // =============================================================================
 // WhatsApp Service — Generates WhatsApp deep links for appointment requests
 // =============================================================================
-// IMPORTANT: This service only generates wa.me links. It does NOT send messages
-// automatically. Actual WhatsApp Business API integration can be added later
-// without rewriting the appointment UI.
+// This service generates wa.me links. No bots, no APIs — just simple deep links
+// that open WhatsApp on the patient's device with a pre-filled message.
 // =============================================================================
 
-import { WHATSAPP_NUMBER, DOCTOR_NAME, CLINIC_BRAND } from '../config';
+import { WHATSAPP_NUMBER, CLINIC_BRAND } from '../config';
 import { WhatsAppAppointment } from '../types';
 
 /**
@@ -23,31 +22,68 @@ function formatDateDisplay(dateStr: string): string {
 }
 
 /**
- * Generates a pre-filled WhatsApp message for an appointment request.
+ * Generates a pre-filled WhatsApp message for a FULL booking (Path B).
+ * Includes patient name, phone, date, time, and reference number.
  */
-export function generateAppointmentMessage(appointment: Pick<WhatsAppAppointment, 'date' | 'time' | 'id'>): string {
+export function generateAppointmentMessage(
+  appointment: Pick<WhatsAppAppointment, 'date' | 'time' | 'id' | 'patientName' | 'patientPhone'>
+): string {
   const dateDisplay = formatDateDisplay(appointment.date);
   return [
-    `Hello ${CLINIC_BRAND},`,
+    `Hello ${CLINIC_BRAND}!`,
     ``,
-    `I would like to request an appointment.`,
+    `My name is ${appointment.patientName} (Ph: ${appointment.patientPhone}).`,
+    `I would like to book an appointment.`,
     ``,
-    `Date: ${dateDisplay}`,
-    `Time: ${appointment.time}`,
-    `Ref: ${appointment.id}`,
+    `📅 Date: ${dateDisplay}`,
+    `🕐 Time: ${appointment.time}`,
+    `📋 Ref: ${appointment.id}`,
     ``,
-    `Please let me know how I can confirm the appointment.`,
+    `Please confirm my appointment. Thank you!`,
   ].join('\n');
 }
 
 /**
- * Generates a WhatsApp deep link (wa.me URL) with a pre-filled appointment message.
- * Opens WhatsApp on the user's device with the message ready to send.
+ * Generates a WhatsApp deep link (wa.me URL) with a pre-filled appointment message (Path B).
  */
-export function generateWhatsAppLink(appointment: Pick<WhatsAppAppointment, 'date' | 'time' | 'id'>): string {
+export function generateWhatsAppLink(
+  appointment: Pick<WhatsAppAppointment, 'date' | 'time' | 'id' | 'patientName' | 'patientPhone'>
+): string {
   const message = generateAppointmentMessage(appointment);
   const encodedMessage = encodeURIComponent(message);
-  // Remove any non-digit characters from the phone number for wa.me format
   const cleanNumber = WHATSAPP_NUMBER.replace(/\D/g, '');
   return `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
+}
+
+/**
+ * Generates a simple "I want to book" WhatsApp link (Path A — Quick Book).
+ * No form needed — patient just clicks and chats directly with the receptionist.
+ */
+export function generateQuickBookLink(): string {
+  const message = `Hello ${CLINIC_BRAND}, I would like to book an appointment.`;
+  const encodedMessage = encodeURIComponent(message);
+  const cleanNumber = WHATSAPP_NUMBER.replace(/\D/g, '');
+  return `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
+}
+
+/**
+ * Generates a WhatsApp link for the receptionist to chat with a patient (Admin → Patient).
+ * Used on the Admin Dashboard's "Chat on WhatsApp" button.
+ */
+export function generateAdminChatLink(
+  patientPhone: string,
+  appointment: Pick<WhatsAppAppointment, 'date' | 'time' | 'patientName'>
+): string {
+  const dateDisplay = formatDateDisplay(appointment.date);
+  const message = [
+    `Hello ${appointment.patientName},`,
+    ``,
+    `This is from ${CLINIC_BRAND}.`,
+    `Your appointment on ${dateDisplay} at ${appointment.time} is confirmed.`,
+    ``,
+    `Thank you!`,
+  ].join('\n');
+  const encodedMessage = encodeURIComponent(message);
+  const cleanPhone = patientPhone.replace(/\D/g, '');
+  return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
 }

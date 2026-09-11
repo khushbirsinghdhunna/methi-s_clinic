@@ -2,10 +2,6 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
-import qrcode from "qrcode-terminal";
-import qrcodeImg from "qrcode";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
@@ -306,136 +302,6 @@ async function seedAvailability() {
 }
 seedAvailability();
 
-// =============================================================================
-// WhatsApp Bot Integration
-// =============================================================================
-import fs from 'fs';
-const pendingNames: Record<string, string> = {};
-let whatsappClient: any | null = null;
-let waStatus: 'disconnected' | 'initializing' | 'qr_ready' | 'connected' | 'auth_failure' = 'disconnected';
-let waQrUrl: string | null = null;
-
-function setupWhatsAppBot() {
-  try {
-    waStatus = 'initializing';
-    waQrUrl = null;
-    
-    // Attempt to use system Chrome if installed, falling back to Puppeteer's downloaded version
-    const winChromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-    let execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    if (!execPath && fs.existsSync(winChromePath)) {
-      execPath = winChromePath;
-    }
-    
-    whatsappClient = new Client({
-      authStrategy: new LocalAuth(),
-      puppeteer: { 
-        executablePath: execPath,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] 
-      }
-    });
-
-    whatsappClient.on('qr', async (qr) => {
-      console.log('Generating QR code image...');
-      waStatus = 'qr_ready';
-      try {
-        waQrUrl = await qrcodeImg.toDataURL(qr);
-        if (!fs.existsSync('./public')) {
-          fs.mkdirSync('./public', { recursive: true });
-        }
-        await qrcodeImg.toFile('./public/whatsapp-qr.png', qr);
-        console.log('✅ QR Code saved to public/whatsapp-qr.png! You can view it at /whatsapp-qr.png');
-      } catch (err) {
-        console.error('Failed to generate QR code image:', err);
-      }
-    });
-
-    whatsappClient.on('authenticated', () => {
-      console.log('✅ WhatsApp Authenticated!');
-    });
-
-    whatsappClient.on('loading_screen', (percent: any, message: any) => {
-      console.log(`WhatsApp loading: ${percent}% - ${message}`);
-    });
-
-    whatsappClient.on('ready', () => {
-      console.log('✅ WhatsApp Bot is ready and listening for messages!');
-      waStatus = 'connected';
-      waQrUrl = null;
-    });
-
-    whatsappClient.on('disconnected', (reason) => {
-      console.log('❌ WhatsApp Bot disconnected', reason);
-      waStatus = 'disconnected';
-      waQrUrl = null;
-    });
-
-    whatsappClient.on('auth_failure', (msg) => {
-      console.error('❌ WhatsApp Bot auth failure', msg);
-      waStatus = 'auth_failure';
-      waQrUrl = null;
-    });
-
-    whatsappClient.on('message', async (msg) => {
-      try {
-        // Ignore status and group messages
-        if (msg.isStatus || msg.from.includes('@g.us')) return;
-
-        const text = msg.body.trim();
-        const sender = msg.from;
-
-        // 1. Check if they are responding with their name
-        if (pendingNames[sender]) {
-          const apptId = pendingNames[sender];
-          const appt = await WAAppointmentModel.findOne({ id: apptId });
-          if (appt) {
-            try {
-              const contact = await msg.getContact();
-              const realPhone = contact.number || sender.replace(/@.*$/, '');
-              appt.patientName = text;
-              appt.patientPhone = realPhone; 
-              appt.whatsappChatId = sender;
-              await appt.save();
-              delete pendingNames[sender];
-              
-              await msg.reply(`Thanks ${text}! We have received your details. Our admin will review and confirm your appointment for ${appt.date} at ${appt.time} shortly.`);
-              console.log(`Updated appointment ${apptId} with name: ${text}, phone: ${realPhone}, chatId: ${sender}`);
-            } catch (err) {
-              console.error("Error processing contact info:", err);
-            }
-          } else {
-            delete pendingNames[sender];
-          }
-          return;
-        }
-
-        // 2. Check if it's the initial booking message from the website
-        const match = text.match(/Ref:\s*(A\d{6})/i);
-        if (match) {
-          const apptId = match[1];
-          const appt = await WAAppointmentModel.findOne({ id: apptId });
-          
-          if (appt) {
-            pendingNames[sender] = apptId;
-            await msg.reply(`Hello! To proceed with your appointment request for ${appt.date} at ${appt.time}, please reply with your full name.`);
-            console.log(`Received booking request for ${apptId} from ${sender}`);
-          }
-        }
-      } catch (dbErr) {
-        console.error("Error handling whatsapp message (Database might be disconnected):", dbErr);
-      }
-    });
-
-    whatsappClient.initialize().catch((err: any) => {
-      console.error("WhatsApp Bot failed to initialize. Skipping WhatsApp integration.", err.message);
-      waStatus = 'disconnected';
-    });
-  } catch (err) {
-    console.error("Failed to initialize WhatsApp bot", err);
-    waStatus = 'disconnected';
-  }
-}
-
 // Helper: generate 10-minute time slots from availability ranges
 function generateSlots(startTime: string, endTime: string): string[] {
   const slots: string[] = [];
@@ -455,45 +321,7 @@ function generateSlots(startTime: string, endTime: string): string[] {
   return slots;
 }
 
-// --- WhatsApp Status Endpoints ---
-
-app.get("/api/whatsapp/status", (req, res) => {
-  res.json({ status: waStatus, qr: waQrUrl });
-});
-
-app.post("/api/whatsapp/reconnect", async (req, res) => {
-  if (waStatus === 'initializing') {
-    return res.json({ success: true, status: 'initializing', message: 'Already initializing' });
-  }
-
-  console.log("Restarting WhatsApp Bot requested...");
-  waStatus = 'initializing';
-  waQrUrl = null;
-  res.json({ success: true, status: 'initializing' });
-
-  // Handle shutdown and restart in background
-  (async () => {
-    try {
-      if (whatsappClient) {
-        console.log("Destroying existing WhatsApp client...");
-        await Promise.race([
-          whatsappClient.destroy(),
-          new Promise(resolve => setTimeout(resolve, 4000))
-        ]);
-        whatsappClient = null;
-      }
-    } catch (err) {
-      console.error("Error destroying whatsapp client", err);
-    }
-    
-    // Give file locks 1 second to release before starting new browser
-    setTimeout(() => {
-      setupWhatsAppBot();
-    }, 1500);
-  })();
-});
-
-// --- WhatsApp Appointment Endpoints ---
+// --- Appointment Endpoints ---
 
 app.get("/api/wa-appointments", authMiddleware, async (req, res) => {
   const appts = await WAAppointmentModel.find().sort({ createdAt: -1 });
@@ -507,7 +335,7 @@ app.get("/api/wa-appointments/:id", async (req, res) => {
 });
 
 app.post("/api/wa-appointments", async (req, res) => {
-  const { date, time } = req.body;
+  const { date, time, patientName, patientPhone } = req.body;
   if (!date || !time) {
     return res.status(400).json({ error: "Date and time are required." });
   }
@@ -517,12 +345,12 @@ app.post("/api/wa-appointments", async (req, res) => {
   const newAppt = await WAAppointmentModel.create({
     id,
     doctor: "Dr. Vanita Methi",
-    patientName: "",
-    patientPhone: "",
+    patientName: patientName || "",
+    patientPhone: patientPhone || "",
     date,
     time,
     status: "pending",
-    source: "whatsapp",
+    source: "website",
     notes: ""
   });
 
@@ -544,13 +372,6 @@ app.patch("/api/wa-appointments/:id", authMiddleware, async (req, res) => {
   if (notes !== undefined) appt.notes = notes;
   
   await appt.save();
-
-  // Send WhatsApp confirmation if status changed to 'confirmed'
-  if (status === 'confirmed' && oldStatus !== 'confirmed' && whatsappClient) {
-    const chatId = appt.whatsappChatId || (appt.patientPhone.includes('@') ? appt.patientPhone : `${appt.patientPhone}@c.us`);
-    whatsappClient.sendMessage(chatId, `Your appointment with Dr. Vanita Methi for ${appt.date} at ${appt.time} is CONFIRMED. Thank you!`)
-      .catch(e => console.error("Failed to send WA confirmation to", chatId, ":", e));
-  }
 
   res.json(appt);
 });
@@ -704,7 +525,6 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    setupWhatsAppBot();
   });
 }
 

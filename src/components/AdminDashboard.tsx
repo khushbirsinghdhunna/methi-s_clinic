@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   getAllAppointments, updateAppointment, getAvailabilityConfig, 
   updateAvailabilityConfig, getBlockedDates, blockDate, unblockDate,
-  hasAdminToken, logoutAdmin
+  createAppointment, hasAdminToken, logoutAdmin
 } from '../services/appointmentService';
+import { generateAdminChatLink } from '../services/whatsappService';
 import { WhatsAppAppointment, Availability, BlockedDate, AppointmentStatus } from '../types';
 import AdminLogin from './AdminLogin';
 
@@ -40,6 +41,16 @@ export default function AdminDashboard() {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
+  // Add New Appointment modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const [addDate, setAddDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [addTime, setAddTime] = useState('05:00 PM');
+  const [addStatus, setAddStatus] = useState<AppointmentStatus>('confirmed');
+  const [addError, setAddError] = useState('');
+  const [savingNew, setSavingNew] = useState(false);
+
   // Availability form state
   const [addAvailDay, setAddAvailDay] = useState('');
   const [addAvailStart, setAddAvailStart] = useState('');
@@ -52,6 +63,35 @@ export default function AdminDashboard() {
   const handleLogout = () => {
     logoutAdmin();
     setIsAuthenticated(false);
+  };
+
+  const handleCreateNewAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addName.trim() || !addPhone.trim()) {
+      setAddError('Patient Name and Phone Number are required.');
+      return;
+    }
+    if (!addDate || !addTime) {
+      setAddError('Date and Time are required.');
+      return;
+    }
+    setSavingNew(true);
+    setAddError('');
+    try {
+      const appt = await createAppointment(addDate, addTime, addName.trim(), addPhone.trim());
+      if (addStatus !== 'pending') {
+        await updateAppointment(appt.id, { status: addStatus });
+      }
+      setShowAddModal(false);
+      setAddName('');
+      setAddPhone('');
+      setAddError('');
+      loadData();
+    } catch (err: any) {
+      setAddError(err.message || 'Failed to create appointment');
+    } finally {
+      setSavingNew(false);
+    }
   };
 
   const loadData = async (silent = false) => {
@@ -179,23 +219,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const [waConnected, setWaConnected] = useState<boolean>(true);
-
-  useEffect(() => {
-    const checkWa = async () => {
-      try {
-        const res = await fetch('/api/whatsapp/status');
-        const data = await res.json();
-        setWaConnected(data.status === 'connected');
-      } catch {
-        setWaConnected(false);
-      }
-    };
-    checkWa();
-    const interval = setInterval(checkWa, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <div className="min-h-screen bg-[#F8F6F2] font-sans text-[#0B1426]">
       {/* Top Bar */}
@@ -205,24 +228,13 @@ export default function AdminDashboard() {
         </a>
         <div className="flex items-center gap-3">
           <h1 className="font-display text-xs uppercase tracking-widest font-bold">Admin Dashboard</h1>
-          <div className="flex items-center gap-1.5 bg-[#C9A96E]/10 text-[#C9A96E] px-2 py-0.5 rounded-full">
+          <div className="flex items-center gap-1.5 bg-[#C9A96E]/10 text-[#C9A96E] px-2.5 py-0.5 rounded-full">
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C9A96E] opacity-75"></span>
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#C9A96E]"></span>
             </span>
             <span className="text-[9px] font-bold uppercase tracking-wider">Live</span>
           </div>
-
-          <a 
-            href="#/whatsapp" 
-            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${
-              waConnected ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-[#ffdad6] text-[#93000a] hover:bg-[#ffdad6]/80'
-            }`}
-            title="Click to view WhatsApp connection details"
-          >
-            <span className="material-symbols-outlined text-[12px]">chat</span>
-            <span>{waConnected ? 'WhatsApp Online' : 'WhatsApp Offline'}</span>
-          </a>
         </div>
         <button
           onClick={handleLogout}
@@ -256,13 +268,29 @@ export default function AdminDashboard() {
             <h2 className="font-display text-[11px] uppercase tracking-[0.2em] text-[#C9A96E] font-bold">
               Appointments Overview
             </h2>
-            <button
-              onClick={() => loadData()}
-              className="text-xs text-[#4A5568] hover:text-[#0B1426] flex items-center gap-1.5 self-start sm:self-auto bg-white border border-[#D6D2CC] px-3 py-1.5 rounded-full shadow-sm hover:border-[#C9A96E] transition-colors"
-            >
-              <span className={`material-symbols-outlined text-[14px] ${loading ? 'animate-spin' : ''}`}>sync</span>
-              <span>Refresh Now</span>
-            </button>
+            <div className="flex items-center gap-2.5 self-start sm:self-auto">
+              <button
+                onClick={() => {
+                  setShowAddModal(true);
+                  setAddDate(new Date().toLocaleDateString('en-CA'));
+                  setAddTime('05:00 PM');
+                  setAddName('');
+                  setAddPhone('');
+                  setAddError('');
+                }}
+                className="bg-[#0B1426] hover:bg-[#C9A96E] text-white text-xs font-semibold px-4 py-2 rounded-full flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                <span>New Appointment</span>
+              </button>
+              <button
+                onClick={() => loadData()}
+                className="text-xs text-[#4A5568] hover:text-[#0B1426] flex items-center gap-1.5 bg-white border border-[#D6D2CC] px-3.5 py-2 rounded-full shadow-sm hover:border-[#C9A96E] transition-colors"
+              >
+                <span className={`material-symbols-outlined text-[14px] ${loading ? 'animate-spin' : ''}`}>sync</span>
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -401,7 +429,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-sm text-[#0B1426] font-medium flex items-center gap-2">
                       <span className="material-symbols-outlined text-[18px] text-[#4A5568]">person</span>
-                      <span>{appt.patientName || <span className="text-[#4A5568] italic font-normal">Awaiting name via WhatsApp</span>}</span>
+                      <span>{appt.patientName || <span className="text-[#4A5568] italic font-normal">Direct WhatsApp Patient</span>}</span>
                     </div>
                     {appt.patientPhone && (
                       <div className="text-xs text-[#4A5568] flex items-center gap-2">
@@ -411,14 +439,28 @@ export default function AdminDashboard() {
                     )}
                     <div className="flex items-center gap-3 text-xs text-[#4A5568] pt-1">
                       <span className="bg-[#F0EDE8] px-2 py-0.5 rounded-full flex items-center gap-1 text-[10px]">
-                        <span className="material-symbols-outlined text-[12px] text-green-700">chat</span>
-                        WhatsApp
+                        <span className="material-symbols-outlined text-[12px] text-green-700">
+                          {appt.source === 'website' ? 'language' : 'chat'}
+                        </span>
+                        {appt.source === 'website' ? 'Website Booking' : 'WhatsApp Chat'}
                       </span>
                       <span className="font-display text-[10px]">REF: {appt.id}</span>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    {appt.patientPhone && (
+                      <a 
+                        href={generateAdminChatLink(appt.patientPhone, appt)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-[#25D366] hover:bg-[#20ba59] text-white px-3 py-2 rounded-full flex items-center gap-1 text-[11px] font-semibold transition-colors shadow-sm"
+                        title="Open WhatsApp Chat with Patient"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">chat</span>
+                        <span className="hidden sm:inline">WhatsApp</span>
+                      </a>
+                    )}
                     {appt.status === 'pending' && (
                       <button 
                         onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
@@ -446,10 +488,10 @@ export default function AdminDashboard() {
                     {appt.patientPhone && (
                       <a 
                         href={`tel:${appt.patientPhone}`}
-                        className="bg-[#F0EDE8] hover:bg-[#D6D2CC] text-[#0B1426] w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                        className="bg-[#F0EDE8] hover:bg-[#D6D2CC] text-[#0B1426] w-9 h-9 rounded-full flex items-center justify-center transition-colors"
                         title="Call Patient"
                       >
-                        <span className="material-symbols-outlined text-[20px]">call</span>
+                        <span className="material-symbols-outlined text-[18px]">call</span>
                       </a>
                     )}
                     <button
@@ -458,10 +500,10 @@ export default function AdminDashboard() {
                         setEditName(appt.patientName || '');
                         setEditPhone(appt.patientPhone || '');
                       }}
-                      className="bg-[#F0EDE8] hover:bg-[#D6D2CC] text-[#0B1426] w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                      className="bg-[#F0EDE8] hover:bg-[#D6D2CC] text-[#0B1426] w-9 h-9 rounded-full flex items-center justify-center transition-colors"
                       title="Edit Patient Info"
                     >
-                      <span className="material-symbols-outlined text-[20px]">edit</span>
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
                     </button>
                   </div>
                 </div>
@@ -655,6 +697,123 @@ export default function AdminDashboard() {
                 Save Changes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Appointment Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-[#0B1426]/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[28px] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-serif text-2xl font-semibold text-[#0B1426]">Add New Appointment</h3>
+                <p className="text-xs text-[#4A5568] mt-1">Log an appointment booked via WhatsApp or walk-in.</p>
+              </div>
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="text-[#4A5568] hover:bg-[#F0EDE8] w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewAppointment} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-display text-[10px] uppercase tracking-[0.15em] text-[#C9A96E] font-bold mb-1.5">
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="date" 
+                    value={addDate}
+                    onChange={e => setAddDate(e.target.value)}
+                    required
+                    className="w-full border border-[#D6D2CC] rounded-2xl px-4 py-2.5 outline-none focus:border-[#C9A96E] bg-[#F8F6F2] focus:bg-white transition-colors text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-display text-[10px] uppercase tracking-[0.15em] text-[#C9A96E] font-bold mb-1.5">
+                    Time Slot <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    value={addTime}
+                    onChange={e => setAddTime(e.target.value)}
+                    placeholder="e.g. 05:30 PM"
+                    required
+                    className="w-full border border-[#D6D2CC] rounded-2xl px-4 py-2.5 outline-none focus:border-[#C9A96E] bg-[#F8F6F2] focus:bg-white transition-colors text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-display text-[10px] uppercase tracking-[0.15em] text-[#C9A96E] font-bold mb-1.5">
+                  Patient Full Name <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  type="text" 
+                  value={addName}
+                  onChange={e => setAddName(e.target.value)}
+                  placeholder="e.g. Pooja Sharma"
+                  required
+                  className="w-full border border-[#D6D2CC] rounded-2xl px-4 py-3 outline-none focus:border-[#C9A96E] bg-[#F8F6F2] focus:bg-white transition-colors text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block font-display text-[10px] uppercase tracking-[0.15em] text-[#C9A96E] font-bold mb-1.5">
+                  WhatsApp Phone Number <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  type="tel" 
+                  value={addPhone}
+                  onChange={e => setAddPhone(e.target.value)}
+                  placeholder="e.g. 9876543210"
+                  required
+                  className="w-full border border-[#D6D2CC] rounded-2xl px-4 py-3 outline-none focus:border-[#C9A96E] bg-[#F8F6F2] focus:bg-white transition-colors text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block font-display text-[10px] uppercase tracking-[0.15em] text-[#C9A96E] font-bold mb-1.5">
+                  Status
+                </label>
+                <select
+                  value={addStatus}
+                  onChange={e => setAddStatus(e.target.value as AppointmentStatus)}
+                  className="w-full border border-[#D6D2CC] rounded-2xl px-4 py-2.5 outline-none focus:border-[#C9A96E] bg-[#F8F6F2] focus:bg-white transition-colors text-sm"
+                >
+                  <option value="confirmed">Confirmed</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+
+              {addError && (
+                <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">error</span>
+                  <span>{addError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-3">
+                <button 
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-6 py-2.5 rounded-full font-display text-xs uppercase tracking-widest font-semibold hover:bg-[#F0EDE8] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={savingNew}
+                  className="bg-[#0B1426] hover:bg-[#C9A96E] text-white px-6 py-2.5 rounded-full font-display text-xs uppercase tracking-widest font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  {savingNew && <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>}
+                  <span>Save Appointment</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

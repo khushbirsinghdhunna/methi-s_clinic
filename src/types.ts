@@ -45,7 +45,7 @@ export interface WhatsAppAppointment {
   status: AppointmentStatus;
   createdAt: string;
   updatedAt: string;
-  source: 'whatsapp';
+  source: 'whatsapp' | 'website';
   notes: string;
 }
 

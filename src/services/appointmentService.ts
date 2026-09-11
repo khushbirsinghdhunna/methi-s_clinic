@@ -47,12 +47,17 @@ export function hasAdminToken(): boolean {
 // Appointments
 // ---------------------------------------------------------------------------
 
-/** Create a new pending appointment (patient selects date + time). */
-export async function createAppointment(date: string, time: string): Promise<WhatsAppAppointment> {
+/** Create a new pending appointment (patient selects date + time + enters name & phone). */
+export async function createAppointment(
+  date: string,
+  time: string,
+  patientName?: string,
+  patientPhone?: string
+): Promise<WhatsAppAppointment> {
   const res = await fetch(`${API_BASE}/wa-appointments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, time }),
+    body: JSON.stringify({ date, time, patientName, patientPhone }),
   });
   if (!res.ok) throw new Error('Failed to create appointment');
   return res.json();

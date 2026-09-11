@@ -15,14 +15,12 @@ import App from './App';
 import AppointmentPage from './components/AppointmentPage';
 import AppointmentStatusPage from './components/AppointmentStatusPage';
 import AdminDashboard from './components/AdminDashboard';
-import WhatsAppStatusPage from './components/WhatsAppStatusPage';
 
 type Route =
   | { page: 'home' }
   | { page: 'appointment' }
   | { page: 'appointmentStatus'; id: string }
-  | { page: 'admin' }
-  | { page: 'whatsapp' };
+  | { page: 'admin' };
 
 function parseHash(hash: string): Route {
   const cleaned = hash.replace(/^#\/?/, '');
@@ -43,10 +41,6 @@ function parseHash(hash: string): Route {
 
   if (cleaned === 'admin') {
     return { page: 'admin' };
-  }
-  
-  if (cleaned === 'whatsapp') {
-    return { page: 'whatsapp' };
   }
 
   // Fallback to home
@@ -76,8 +70,6 @@ export default function AppRouter() {
       return <AppointmentStatusPage appointmentId={route.id} />;
     case 'admin':
       return <AdminDashboard />;
-    case 'whatsapp':
-      return <WhatsAppStatusPage />;
     default:
       return <App />;
   }
